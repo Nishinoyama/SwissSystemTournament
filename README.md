@@ -1,0 +1,2 @@
+# SwissSystemTournament
+スイス式トーナメントを実装する
