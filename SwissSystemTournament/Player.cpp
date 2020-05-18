@@ -2,24 +2,25 @@
 // Created by Nishinoyama on 2020/05/09.
 //
 
+#include <cstdio>
 #include "Player.h"
 
-Player::Player() {
-    points = 0;
-    opponent = nullptr;
-    id = -1;
-    roundCount = 0;
-    matchWinPercentage = 0.00;
-    opponentMatchWinPercentage = 0.00;
-    isDummy = false;
-}
+Player::Player() = default;
 
 Player::~Player() = default;
 
-void Player::pushMatchedResults(Player *player, bool victory) {
-    matchedResults.emplace_back(player,victory);
-    if( !player->isDummy ) roundCount++;
-    matchedPlayerID.insert(player->id);
+void Player::pushMatchedResults( MatchResult result ) {
+    matchedResults.push_back(result);
+    if( !result.isBye ) roundCount++;
+    matchedPlayerID.insert( result.opponent->id );
+}
+
+void Player::calculatePoints() {
+    points = 0;
+    for( const MatchResult & result : matchedResults ){
+        if( result.isWin() ) points += 3;
+        if( result.isDraw() ) points += 1;
+    }
 }
 
 void Player::calculateMatchWinPercentage() {
@@ -30,9 +31,29 @@ void Player::calculateMatchWinPercentage() {
 
 void Player::calculateOpponentMatchWinPercentage() {
     opponentMatchWinPercentage = 0.0;
-    for ( const auto & result : matchedResults ){
-        double winPercentage = std::max( 1.0 / 3, result.first->matchWinPercentage );
+    for ( const MatchResult & result : matchedResults ){
+        double winPercentage = std::max( 1.0 / 3, result.opponent->matchWinPercentage );
         opponentMatchWinPercentage += winPercentage / roundCount;
     }
 }
+
+void Player::calculateGameWinPercentage() {
+    gameWinPercentage = 0.0;
+    int gamePoint = 0;
+    int gameRounds = 0;
+    for ( const MatchResult & result : matchedResults ) {
+        gamePoint += result.winCount*3+result.drawCount;
+        gameRounds += result.winCount+result.drawCount+result.loseCount;
+    }
+    gameWinPercentage = 1.0 / 3 * gamePoint / gameRounds;
+}
+
+void Player::calculateOpponentGameWinPercentage() {
+    opponentGameWinPercentage = 0.0;
+    for ( const MatchResult & result : matchedResults ){
+        double winPercentage = result.opponent->gameWinPercentage;
+        opponentGameWinPercentage += winPercentage / roundCount;
+    }
+}
+
 
