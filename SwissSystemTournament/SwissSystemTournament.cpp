@@ -3,9 +3,12 @@
 //
 
 #include "SwissSystemTournament.h"
+#include "picojson.h"
 #include <cstdio>
 #include <algorithm>
 #include <cassert>
+#include <fstream>
+#include <bitset>
 
 SwissSystemTournament::SwissSystemTournament() {
     int playerNumber;
@@ -18,7 +21,6 @@ SwissSystemTournament::SwissSystemTournament() {
     playersPermutation.assign( imagPlayerNumber(), nullptr );
     MatchingNumber = 0; while ( imagPlayerNumber() >= 1 << MatchingNumber) MatchingNumber++;
 
-    Print();
     scanf("%d", &MatchingNumber );
 
     matchedRounds = 0;
@@ -41,9 +43,8 @@ SwissSystemTournament::SwissSystemTournament() {
         Matching();
         OutputMatching();
         InputMatchResult();
-        CalculatePlayerState();
-        OutputPlayerState();
-        // OutputFinalResult();
+        // CalculatePlayerState();
+        // OutputPlayerState();
     }
 
     OutputFinalResult();
@@ -64,6 +65,17 @@ void SwissSystemTournament::Matching() {
 
     SortPlayers();
 
+    /** マッチングをDPで処理
+     * dp : dp本体
+     * dp[ni][S] := [0,ni) までマッチング済み、[ni,ni+K)までのマッチング済み（bit管理）での最小の偏り
+     * K は 少なくとも(ラウンド数+2)で全員のマッチングは成立する。（数学的証明は厳密には行っていない）
+     * ni+k+1番目とマッチング成立時の変遷 dp[ni][S] + cost -> dp[ni+1][S>>1|1<<k]
+     * ただし、S&(1<<k) == 0 である必要がある。 （マッチングのダブり）
+     * もし、S&1（niがマッチング済み）なら、dp[ni][S] -> dp[ni+1][S>>1]
+     *
+     * rb : dpの変遷元
+     * rb[ni][S] := { 変遷元のS', 変遷でマッチングしたか }
+     */
     std::vector<std::vector<int>> dp(imagPlayerNumber()+1, std::vector<int>(1<<(matchedRounds+2), 1e9 ) );
     std::vector<std::vector<std::pair<int,int>>> rb(imagPlayerNumber()+1, std::vector<std::pair<int,int>>(1<<(matchedRounds+2), {-1,-1} ) );
     dp[0][0] = 0;
@@ -120,11 +132,31 @@ void SwissSystemTournament::Matching() {
 }
 
 void SwissSystemTournament::OutputMatching() {
+    std::string matchingOutputFileName;
+    matchingOutputFileName += "matching_" + std::to_string(matchedRounds) + ".json";
+    std::fstream fs( matchingOutputFileName, std::ios::out );
+    std::bitset<4000> searched;
+    fs << "{\n\t\"matchingList\":[\n";
     for (int i = 0; i < PlayerNumber; i++ ) {
         // if( playersPermutation[i]->isDummy || playersPermutation[i]->opponent->isDummy ) continue;
-        printf("%d v.s. %d  ", playersPermutation[i]->id, playersPermutation[i]->opponent->id );
+        if( !searched[playersPermutation[i]->id] ) {
+            if( i ) fs << ",\n";
+            fs << "\t\t{\n"
+               << "\t\t\t\"playerID\" : " << playersPermutation[i]->id << ",\n"
+               << "\t\t\t\"opponentID\" : " << playersPermutation[i]->opponent->id << ",\n"
+               << "\t\t\t\"win\" : 0,\n"
+               << "\t\t\t\"lose\" : 0,\n"
+               << "\t\t\t\"draw\" : 0,\n"
+               << "\t\t\t\"withdraw\" : false,\n"
+               << "\t\t\t\"withdrawn\" : false\n"
+               << "\t\t}";
+            // fs << playersPermutation[i]->id << "," << playersPermutation[i]->opponent->id << std::endl;
+            searched[playersPermutation[i]->id] = true;
+            searched[playersPermutation[i]->opponent->id] = true;
+        }
+        // printf("%d v.s. %d  ", playersPermutation[i]->id, playersPermutation[i]->opponent->id );
     }
-    printf("\n");
+    fs << "\n\t]\n}\n";
 }
 
 void SwissSystemTournament::InputMatchResult() {
