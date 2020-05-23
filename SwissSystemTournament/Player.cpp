@@ -11,7 +11,7 @@ Player::~Player() = default;
 
 void Player::pushMatchedResults( MatchResult result ) {
     matchedResults.push_back(result);
-    if( !result.isBye ) roundCount++;
+    if( result.isAvail() ) roundCount++;
     matchedPlayerID.insert( result.opponent->id );
 }
 

@@ -14,20 +14,23 @@ class MatchResult {
 
 public:
 
+
     int id{};
     int winCount{};
     int loseCount{};
     int drawCount{};
     int roundNO{};
     Player* opponent = nullptr;
-    bool isBye{}; // Bye:不戦勝
+    bool withdraw{}; // withdraw:棄権能動
+    bool withdrawn{}; // withdrawn:棄権受動
 
     MatchResult();
-    MatchResult(int winCount, int drawCount, int loseCount, Player* opponent );
+    MatchResult(int winCount, int drawCount, int loseCount, bool withdraw, bool withdrawn, Player *opponent);
 
     bool isWin() const;
     bool isDraw() const;
     bool isLose() const;
+    bool isAvail() const;
 };
 
 

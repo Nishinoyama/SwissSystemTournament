@@ -9,6 +9,7 @@
 #include <cassert>
 #include <fstream>
 #include <bitset>
+#include <iomanip>
 
 SwissSystemTournament::SwissSystemTournament() {
     int playerNumber;
@@ -33,7 +34,7 @@ SwissSystemTournament::SwissSystemTournament() {
     if( hasDummyPlayer ){
         Player dummy;
         dummy.id = PlayerNumber;
-        dummy.isDummy = true;
+        dummy.withdrew = true;
         playersPermutation[PlayerNumber] = &dummy;
     }
 
@@ -135,10 +136,10 @@ void SwissSystemTournament::OutputMatching() {
     std::string matchingOutputFileName;
     matchingOutputFileName += "matching_" + std::to_string(matchedRounds) + ".json";
     std::fstream fs( matchingOutputFileName, std::ios::out );
-    std::bitset<4000> searched;
+    std::bitset<4001> searched;
     fs << "{\n\t\"matchingList\":[\n";
     for (int i = 0; i < PlayerNumber; i++ ) {
-        // if( playersPermutation[i]->isDummy || playersPermutation[i]->opponent->isDummy ) continue;
+        if( playersPermutation[i]->withdrew || playersPermutation[i]->opponent->withdrew ) continue;
         if( !searched[playersPermutation[i]->id] ) {
             if( i ) fs << ",\n";
             fs << "\t\t{\n"
@@ -173,6 +174,8 @@ void SwissSystemTournament::InputMatchResult() {
             int leftWinCount;
             int leftDrawCount;
             int leftLoseCount;
+            int leftDrew;
+            int leftDrawn;
 
             // scanf( "%d %d %d", &leftWinCount, &leftDrawCount, &leftLoseCount );
 
@@ -182,12 +185,14 @@ void SwissSystemTournament::InputMatchResult() {
             leftWinCount = left->id%4;
             leftLoseCount = right->id%3;
             leftDrawCount = 5-leftWinCount-leftLoseCount;
+            leftDrew = left->withdrew;
+            leftDrawn = right->withdrew;
             /**
              *
              */
 
-            MatchResult leftResult(leftWinCount,leftDrawCount,leftLoseCount,right);
-            MatchResult rightResult(leftLoseCount,leftDrawCount,leftWinCount,left);
+            MatchResult leftResult(leftWinCount,leftDrawCount,leftLoseCount,leftDrew,leftDrawn,right);
+            MatchResult rightResult(leftLoseCount,leftDrawCount,leftWinCount,leftDrawn,leftDrew,left);
 
             left->pushMatchedResults(leftResult);
             right->pushMatchedResults(rightResult);
@@ -228,17 +233,17 @@ void SwissSystemTournament::SortPlayers() {
     CalculatePlayerState();
     std::sort(playersPermutation.begin(), playersPermutation.end(),
               []( const Player* lp, const Player* rp) -> bool {
-                  if( rp->isDummy ) return true;
-                  if( lp->isDummy ) return false;
-                  if (lp->points == rp->points) {
-                      if (std::abs(lp->opponentMatchWinPercentage - rp->opponentMatchWinPercentage) < EPS) {
-                          if (std::abs(lp->gameWinPercentage - rp->gameWinPercentage) < EPS) {
-                              if (std::abs(lp->opponentGameWinPercentage - rp->opponentGameWinPercentage) < EPS) {
-                                  return lp->rating > rp->rating;
-                              } else { return lp->opponentGameWinPercentage > rp->opponentGameWinPercentage; }
-                          } else { return lp->gameWinPercentage > rp->gameWinPercentage; }
-                      } else { return lp->opponentMatchWinPercentage > rp->opponentMatchWinPercentage; }
-                  } else { return lp->points > rp->points; }
+                  if( rp->withdrew == lp->withdrew ) {
+                      if (lp->points == rp->points) {
+                          if (std::abs(lp->opponentMatchWinPercentage - rp->opponentMatchWinPercentage) < EPS) {
+                              if (std::abs(lp->gameWinPercentage - rp->gameWinPercentage) < EPS) {
+                                  if (std::abs(lp->opponentGameWinPercentage - rp->opponentGameWinPercentage) < EPS) {
+                                      return lp->rating > rp->rating;
+                                  } else { return lp->opponentGameWinPercentage > rp->opponentGameWinPercentage; }
+                              } else { return lp->gameWinPercentage > rp->gameWinPercentage; }
+                          } else { return lp->opponentMatchWinPercentage > rp->opponentMatchWinPercentage; }
+                      } else { return lp->points > rp->points; }
+                  } else { return rp->withdrew; }
               });
 };
 
@@ -246,23 +251,82 @@ void SwissSystemTournament::OutputFinalResult() {
     SortPlayers();
     int grade = 0;
     int tie = 0;
+    std::string resultHTMLFileName;
+    resultHTMLFileName += "result_" + std::to_string(matchedRounds) + ".html";
+    std::fstream fs( resultHTMLFileName, std::ios::out );
+    fs << "<html>"
+       << "<head>"
+       << "<meta charset='UTF-8'>"
+       << "<style>"
+       << "table {"
+       << "\tborder-collapse: collapse;"
+       << "}"
+       << "td,th{"
+       << "\tborder: solid 1px;"
+       << "}"
+       << ".win-match{"
+       << "background: #CDFCDD"
+       << "}"
+       << ".lose-match{"
+       << "background: #FDDCCD"
+       << "}"
+       << ".draw-match{"
+       << "background: #FDFCCD"
+       << "}"
+       << ".no-match{"
+       << "background: #cDcCCD"
+       << "}"
+       << "</style>"
+       << "</head>"
+       << "<body>"
+       << "<table>"
+       << "<tr>"
+       << "<th>順位</th>"
+       << "<th>ID</th>"
+       << "<th>勝点</th>"
+       << "<th>R数</th>"
+       << "<th>OMWP</th>"
+       << "<th>GWP</th>"
+       << "<th>OGWP</th>";
+    for (int i = 0; i < matchedRounds; ++i) {
+        fs << "<th></th>";
+    }
+    fs << "</tr>";
     for ( const Player* player : playersPermutation ){
-        if( player->isDummy ) continue;
+        if( player->withdrew ) continue;
+        fs << "<tr>";
         if( grade ){
             if( std::abs( player->opponentMatchWinPercentage - (player-1)->opponentMatchWinPercentage ) < EPS
                 &&  player->points == (player-1)->points ) tie++;
             else tie = 0;
         }
-        printf("%3dth ID:%3d Pts:%2d R:%d OMWP:%0.04lf GWP:%0.04lf OGWP:%0.04lf",
-               ++grade-tie, player->id, player->points, player->roundCount, player->opponentMatchWinPercentage,
-               player->gameWinPercentage, player->opponentGameWinPercentage  );
+        // printf("%3dth ID:%3d Pts:%2d R:%d OMWP:%0.04lf GWP:%0.04lf OGWP:%0.04lf",
+        //       ++grade-tie, player->id, player->points, player->roundCount, player->opponentMatchWinPercentage,
+        //       player->gameWinPercentage, player->opponentGameWinPercentage  );
+        fs << "<td>" << ++grade-tie << "</td>"
+           << "<td>" << player->id << "</td>"
+           << "<td>" << player->points << "</td>"
+           << "<td>" << player->roundCount << "</td>" << std::fixed << std::setprecision(4)
+           << "<td>" << player->opponentMatchWinPercentage << "</td>"
+           << "<td>" << player->gameWinPercentage << "</td>"
+           << "<td>" << player->opponentGameWinPercentage << "</td>";
         int rounds = 0;
         for( const MatchResult result : player->matchedResults ){
-            if( result.isBye ) continue;
-            printf( " No%02d:%3d%s", ++rounds, result.opponent->id, result.isWin()?"o":result.isDraw()?"-":"x" );
+            fs << "<td ";
+            if( result.isAvail() ) {
+                // printf(" No%02d:%3d%s", ++rounds, result.opponent->id, result.isWin() ? "o" : result.isDraw() ? "-" : "x");
+                fs << "class='" << (result.isWin() ? "win" : result.isDraw() ? "draw" : "lose")
+                   << "-match'>" << result.opponent->id << " " << (result.isWin() ? "o" : result.isDraw() ? "-" : "x");
+            }else{
+                fs << "class='no-match'>";
+            }
+            fs << "</td>";
         }
-        printf("\n");
+        fs << "</tr>";
     }
+    fs << "</table>"
+       << "</body>"
+       << "</html>";
 }
 
 int SwissSystemTournament::imagPlayerNumber() const {

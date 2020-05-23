@@ -26,7 +26,7 @@ public:
     void calculateGameWinPercentage();
     void calculateOpponentGameWinPercentage();
 
-    bool isDummy{};
+    bool withdrew{};
     int id{};
     int points{};
     Player* opponent{};
