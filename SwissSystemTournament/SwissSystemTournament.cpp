@@ -10,6 +10,7 @@
 #include <fstream>
 #include <bitset>
 #include <iomanip>
+#include <direct.h>
 
 SwissSystemTournament::SwissSystemTournament(int roundNumber, const std::string& matchingName) {
     matchedRounds = roundNumber;
@@ -43,6 +44,26 @@ SwissSystemTournament::~SwissSystemTournament() {
     std::cout << "Finished Successfully" << std::endl;
 }
 
+void SwissSystemTournament::build(){
+
+    PlayerNumber = 37;
+    // 奇数人だったらダミーのプレイヤーを作成する
+    hasDummyPlayer = PlayerNumber%2;
+    players.assign( imagPlayerNumber(), Player() );
+    playersPermutation.assign( imagPlayerNumber(), nullptr );
+    for (int i = 0; i < imagPlayerNumber(); i++){
+        players[i].id = i;
+        playersPermutation[i] = &players[i];
+    }
+    if( hasDummyPlayer ){
+        players[PlayerNumber].withdrew = true;
+    }
+
+    _mkdir(MatchingName.c_str());
+
+    Print();
+}
+
 void SwissSystemTournament::MakeJSONData() {
     picojson::object id;
     picojson::array playersJSON;
@@ -69,30 +90,13 @@ void SwissSystemTournament::MakeJSONData() {
         playersJSON.emplace_back(playerObject);
     }
     id.insert(std::make_pair("players", picojson::value(playersJSON)));
-    std::ofstream ofs( MatchingName+"_"+std::to_string(matchedRounds)+".json");
+    std::ofstream ofs( MatchingName+"/data_"+std::to_string(matchedRounds)+".json");
     ofs << picojson::value(id).serialize(true) << std::endl;
     ofs.close();
 }
 
-void SwissSystemTournament::build(){
-
-    PlayerNumber = 37;
-    // 奇数人だったらダミーのプレイヤーを作成する
-    hasDummyPlayer = PlayerNumber%2;
-    players.assign( imagPlayerNumber(), Player() );
-    playersPermutation.assign( imagPlayerNumber(), nullptr );
-    for (int i = 0; i < imagPlayerNumber(); i++){
-        players[i].id = i;
-        playersPermutation[i] = &players[i];
-    }
-    if( hasDummyPlayer ){
-        players[PlayerNumber].withdrew = true;
-    }
-    Print();
-}
-
 void SwissSystemTournament::initFromJSON() {
-    std::ifstream ifs( MatchingName + "_" + std::to_string(matchedRounds) + ".json", std::ios::in );
+    std::ifstream ifs( MatchingName + "/data_" + std::to_string(matchedRounds) + ".json", std::ios::in );
     const std::string json((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
     ifs.close();
 
@@ -218,7 +222,7 @@ void SwissSystemTournament::Matching() {
 
 void SwissSystemTournament::OutputMatching() {
     std::string matchingOutputFileName;
-    matchingOutputFileName = MatchingName + "_matching_" + std::to_string(matchedRounds);
+    matchingOutputFileName = MatchingName + "/matching_" + std::to_string(matchedRounds);
     std::fstream fs ( matchingOutputFileName + ".json", std::ios::out );
     std::bitset<4001> searched;
     fs << "{\n\t\"matchingList\":[\n";
@@ -248,7 +252,7 @@ void SwissSystemTournament::InputMatchResult() {
     std::vector<bool> calculatedPlayer( imagPlayerNumber(),false);
 
     std::fstream fs;
-    fs.open( MatchingName + "_matching_" + std::to_string(matchedRounds) + ".json", std::ios::binary );
+    fs.open( MatchingName + "/matching_" + std::to_string(matchedRounds) + ".json", std::ios::binary );
     picojson::value val;
     picojson::parse(val, fs);
 
@@ -341,7 +345,7 @@ void SwissSystemTournament::OutputFinalResult() {
     int grade = 0;
     int tie = 0;
     std::string resultHTMLFileName;
-    resultHTMLFileName = MatchingName + "_result_" + std::to_string(matchedRounds) + ".html";
+    resultHTMLFileName = MatchingName + "/result_" + std::to_string(matchedRounds) + ".html";
     std::fstream fs( resultHTMLFileName, std::ios::out );
     fs << "<html>"
        << "<head>"
