@@ -9,6 +9,7 @@
 
 #include <set>
 #include <vector>
+#include <string>
 
 class MatchResult;
 
@@ -26,20 +27,25 @@ public:
     void calculateGameWinPercentage();
     void calculateOpponentGameWinPercentage();
 
-    bool withdrew{};
+
+    // データとして保存すべきフィールド
     int id{};
-    int points{};
-    Player* opponent{};
+    std::string name{};
+    int rating{};
+    bool withdrew{};
+    std::vector<MatchResult> matchedResults{};
+
     int roundCount{};
+    int points{};
     double matchWinPercentage{};
     double opponentMatchWinPercentage{};
     double gameWinPercentage{};
     double opponentGameWinPercentage{};
-    int rating{};
-
     std::set<int> matchedPlayerID{};
-    std::vector<MatchResult> matchedResults{};
 
+    Player* opponent{};
+
+    void buildMatchResult( std::vector<Player>& players );
 };
 
 #endif //SWISSSYSTEMTOURNAMENT_PLAYER_H

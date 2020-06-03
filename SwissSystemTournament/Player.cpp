@@ -12,7 +12,7 @@ Player::~Player() = default;
 void Player::pushMatchedResults( MatchResult result ) {
     matchedResults.push_back(result);
     if( result.isAvail() ) roundCount++;
-    matchedPlayerID.insert( result.opponent->id );
+    if( result.opponent != nullptr ) matchedPlayerID.insert( result.opponent->id );
 }
 
 void Player::calculatePoints() {
@@ -32,6 +32,7 @@ void Player::calculateMatchWinPercentage() {
 void Player::calculateOpponentMatchWinPercentage() {
     opponentMatchWinPercentage = 0.0;
     for ( const MatchResult & result : matchedResults ){
+        if( !result.isAvail() ) continue;
         double winPercentage = std::max( 1.0 / 3, result.opponent->matchWinPercentage );
         opponentMatchWinPercentage += winPercentage / roundCount;
     }
@@ -42,17 +43,26 @@ void Player::calculateGameWinPercentage() {
     int gamePoint = 0;
     int gameRounds = 0;
     for ( const MatchResult & result : matchedResults ) {
+        if( !result.isAvail() ) continue;
         gamePoint += result.winCount*3+result.drawCount;
         gameRounds += result.winCount+result.drawCount+result.loseCount;
     }
-    gameWinPercentage = 1.0 / 3 * gamePoint / gameRounds;
+    if( gameRounds ) gameWinPercentage = 1.0 / 3 * gamePoint / gameRounds;
 }
 
 void Player::calculateOpponentGameWinPercentage() {
     opponentGameWinPercentage = 0.0;
     for ( const MatchResult & result : matchedResults ){
+        if( !result.isAvail() ) continue;
         double winPercentage = result.opponent->gameWinPercentage;
         opponentGameWinPercentage += winPercentage / roundCount;
+    }
+}
+
+void Player::buildMatchResult( std::vector<Player>& players ){
+    for( auto& matchResult : matchedResults ){
+        matchedPlayerID.insert(matchResult.opponentID);
+        matchResult.opponent = &players[matchResult.opponentID];
     }
 }
 

@@ -14,15 +14,17 @@ class MatchResult {
 
 public:
 
-
+    // データとして保存すべきフィールド
     int id{};
+    int opponentID{};
     int winCount{};
     int loseCount{};
     int drawCount{};
-    int roundNO{};
-    Player* opponent = nullptr;
     bool withdraw{}; // withdraw:棄権能動
     bool withdrawn{}; // withdrawn:棄権受動
+
+    int roundNO{};
+    Player* opponent = nullptr;
 
     MatchResult();
     MatchResult(int winCount, int drawCount, int loseCount, bool withdraw, bool withdrawn, Player *opponent);
