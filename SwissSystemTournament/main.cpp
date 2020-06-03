@@ -14,7 +14,7 @@ int main() {
     for( int i = 0; i < N; i++ ){
         SwissSystemTournament s(i, matchingName);
         std::cout << "No." << i << " MatchInputReady?:";
-        std::cin >> tmp;
+        // std::cin >> tmp;
         s.InputMatchResult();
         s.OutputFinalResult();
         s.MakeJSONData();

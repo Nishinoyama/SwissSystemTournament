@@ -3,6 +3,7 @@
 //
 
 #include <cstdio>
+#include <iostream>
 #include "Player.h"
 
 Player::Player() = default;
@@ -18,8 +19,12 @@ void Player::pushMatchedResults( MatchResult result ) {
 void Player::calculatePoints() {
     points = 0;
     for( const MatchResult & result : matchedResults ){
-        if( result.isWin() ) points += 3;
-        if( result.isDraw() ) points += 1;
+        if( !result.isAvail() ){
+            if( result.withdrawn && !result.withdraw ) points += 3;
+        }else{
+            if( result.isWin()  ) points += 3;
+            if( result.isDraw() ) points += 1;
+        }
     }
 }
 
