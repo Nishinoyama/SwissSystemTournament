@@ -43,6 +43,7 @@ public :
     void OutputFinalResult();
     void SortPlayers();
     void MakeJSONData();
+    void updatePlayerPointer();
 
     void initFromJSON();
 };

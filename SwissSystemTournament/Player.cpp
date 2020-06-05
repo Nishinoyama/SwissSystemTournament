@@ -3,6 +3,7 @@
 //
 
 #include <cstdio>
+#include <algorithm>
 #include <iostream>
 #include "Player.h"
 
