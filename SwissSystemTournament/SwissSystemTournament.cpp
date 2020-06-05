@@ -149,6 +149,7 @@ void SwissSystemTournament::Matching() {
      * dp : dp本体
      * dp[ni][S] := [0,ni) までマッチング済み、[ni,ni+K)までのマッチング済み（bit管理）での最小の偏り
      * K は 少なくとも(ラウンド数+2)で全員のマッチングは成立する。（数学的証明は厳密には行っていない）
+     * K = 6 から実際に調査、マッチング不成立ならKを増やしていく。
      * ni+k+1番目とマッチング成立時の変遷 dp[ni][S] + cost -> dp[ni+1][S>>1|1<<k]
      * ただし、S&(1<<k) == 0 である必要がある。 （マッチングのダブり）
      * もし、S&1（niがマッチング済み）なら、dp[ni][S] -> dp[ni+1][S>>1]
@@ -156,56 +157,65 @@ void SwissSystemTournament::Matching() {
      * rb : dpの変遷元
      * rb[ni][S] := { 変遷元のS', 変遷でマッチングしたか }
      */
-    std::vector<std::vector<int>> dp(imagPlayerNumber()+1, std::vector<int>(1<<(matchedRounds+2), 1e9 ) );
-    std::vector<std::vector<std::pair<int,int>>> rb(imagPlayerNumber()+1, std::vector<std::pair<int,int>>(1<<(matchedRounds+2), {-1,-1} ) );
-    dp[0][0] = 0;
-    for( int ni = 0; ni < imagPlayerNumber(); ni++ ){
-        for( int bi = 0; bi < 1 << (matchedRounds+2); bi++ ){
-            int nni = ni+1;
-            if( dp[ni][bi] == INF ) continue;
-            if( bi&1 ){
-                if( dp[ni][bi] < dp[nni][bi>>1] ){
-                    dp[nni][bi>>1] = dp[ni][bi];
-                    rb[nni][bi>>1] = {bi,0};
+    for( int ext = std::min( 6, matchedRounds+2 ); ext < INF; ext++ ){
+        std::vector<std::vector<int>> dp(imagPlayerNumber() + 1, std::vector<int>(1 << ext, 1e9));
+        std::vector<std::vector<std::pair<int, int>>> rb(imagPlayerNumber() + 1,
+                                                         std::vector<std::pair<int, int>>(1 << ext, {-1, -1}));
+        dp[0][0] = 0;
+        for (int ni = 0; ni < imagPlayerNumber(); ni++) {
+            for (int bi = 0; bi < 1 << ext; bi++) {
+                int nni = ni + 1;
+                if (dp[ni][bi] == INF) continue;
+                if (bi & 1) {
+                    if (dp[ni][bi] < dp[nni][bi >> 1]) {
+                        dp[nni][bi >> 1] = dp[ni][bi];
+                        rb[nni][bi >> 1] = {bi, 0};
+                    }
+                    continue;
                 }
-                continue;
-            }
-            for( int pi = 0; pi < matchedRounds+2; pi++ ){
-                int ppi = ni+pi+1;
-                if( ppi >= imagPlayerNumber() ) break;
-                if( (bi>>1)&(1<<pi) ) continue;
-                int bbi = (bi>>1)|(1<<pi);
-                int cost = playersPermutation[ni]->points - playersPermutation[ppi]->points;
-                if( playersPermutation[ni]->matchedPlayerID.find(playersPermutation[ppi]->id) == playersPermutation[ni]->matchedPlayerID.end() ){
-                    if( dp[ni][bi] + cost < dp[nni][bbi] ){
-                        dp[nni][bbi] = dp[ni][bi];
-                        rb[nni][bbi] = {bi,1};
+                for (int pi = 0; pi < ext; pi++) {
+                    int ppi = ni + pi + 1;
+                    if (ppi >= imagPlayerNumber()) break;
+                    if ((bi >> 1) & (1 << pi)) continue;
+                    int bbi = (bi >> 1) | (1 << pi);
+                    int cost = playersPermutation[ni]->points - playersPermutation[ppi]->points;
+                    if (playersPermutation[ni]->matchedPlayerID.find(playersPermutation[ppi]->id) ==
+                        playersPermutation[ni]->matchedPlayerID.end()) {
+                        if (dp[ni][bi] + cost < dp[nni][bbi]) {
+                            dp[nni][bbi] = dp[ni][bi];
+                            rb[nni][bbi] = {bi, 1};
+                        }
                     }
                 }
             }
+            if (ni % 50 == 0) std::cout << ".";
         }
-        if( ni%50 == 0 ) std::cout << ".";
-    }
 
-    int rbn = imagPlayerNumber(), rbb = 0;
-    const static auto invertLeftShift = []( int k ){
-        int count = 0;
-        int bit = 1;
-        while( !( k & bit ) ) count++, bit <<= 1;
-        return count;
-    };
-    while( rbn != 0 || rbb != 0 ){
-        int tmp = rb[rbn][rbb].first;
-        assert( tmp>=0 );
-        if( rb[rbn][rbb].second ){
-            int transition = (rbb<<1) - tmp;
-            int li = rbn-1;
-            int ri = li+invertLeftShift(transition);
-            playersPermutation[li]->opponent = playersPermutation[ri];
-            playersPermutation[ri]->opponent = playersPermutation[li];
+        int rbn = imagPlayerNumber(), rbb = 0;
+        const static auto invertLeftShift = []( int k ){
+            int count = 0;
+            int bit = 1;
+            while( !( k & bit ) ) count++, bit <<= 1;
+            return count;
+        };
+        bool matchSuccess = true;
+        while( rbn != 0 || rbb != 0 ){
+            int tmp = rb[rbn][rbb].first;
+            if( tmp<0 ){
+                matchSuccess = false;
+                break;
+            }
+            if( rb[rbn][rbb].second ){
+                int transition = (rbb<<1) - tmp;
+                int li = rbn-1;
+                int ri = li+invertLeftShift(transition);
+                playersPermutation[li]->opponent = playersPermutation[ri];
+                playersPermutation[ri]->opponent = playersPermutation[li];
+            }
+            rbn--;
+            rbb = tmp;
         }
-        rbn--;
-        rbb = tmp;
+        if( matchSuccess ) break;
     }
     std::cout << " complete!" << std::endl;
 }
