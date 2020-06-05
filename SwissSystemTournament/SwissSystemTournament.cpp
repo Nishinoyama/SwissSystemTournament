@@ -12,7 +12,8 @@
 #include <iomanip>
 #include <direct.h>
 
-SwissSystemTournament::SwissSystemTournament(int roundNumber, const std::string& matchingName) {
+SwissSystemTournament::SwissSystemTournament( int playerNumber, int roundNumber, const std::string& matchingName) {
+    PlayerNumber = playerNumber;
     matchedRounds = roundNumber;
     MatchingName = matchingName;
     if( matchedRounds == 0 ){
@@ -46,7 +47,6 @@ SwissSystemTournament::~SwissSystemTournament() {
 
 void SwissSystemTournament::build(){
 
-    PlayerNumber = 37;
     // 奇数人だったらダミーのプレイヤーを作成する
     hasDummyPlayer = PlayerNumber%2;
     players.assign( imagPlayerNumber(), Player() );
@@ -141,8 +141,8 @@ void SwissSystemTournament::initFromJSON() {
         playersPermutation[i] = &players[i];
     }
 
-    OutputFinalResult();
-
+    std::cout << "load JSON data successfully" << std::endl;
+    // OutputFinalResult();
 }
 
 void SwissSystemTournament::Print() const {
@@ -157,6 +157,7 @@ void SwissSystemTournament::Matching() {
 
     SortPlayers();
 
+    std::cout << "matching.";
     /** マッチングをDPで処理
      * dp : dp本体
      * dp[ni][S] := [0,ni) までマッチング済み、[ni,ni+K)までのマッチング済み（bit管理）での最小の偏り
@@ -196,6 +197,7 @@ void SwissSystemTournament::Matching() {
                 }
             }
         }
+        if( ni%50 == 0 ) std::cout << ".";
     }
 
     int rbn = imagPlayerNumber(), rbb = 0;
@@ -218,6 +220,7 @@ void SwissSystemTournament::Matching() {
         rbn--;
         rbb = tmp;
     }
+    std::cout << " complete!" << std::endl;
 }
 
 void SwissSystemTournament::OutputMatching() {
@@ -248,6 +251,7 @@ void SwissSystemTournament::OutputMatching() {
 }
 
 void SwissSystemTournament::InputMatchResult() {
+    std::cout << "match result proceed... ";
 
     std::vector<bool> calculatedPlayer( imagPlayerNumber(),false);
 
@@ -294,6 +298,7 @@ void SwissSystemTournament::InputMatchResult() {
         }
     }
     matchedRounds++;
+    std::cout << " complete!" << std::endl;
 }
 
 void SwissSystemTournament::CalculatePlayerState() {
@@ -341,6 +346,7 @@ void SwissSystemTournament::SortPlayers() {
 };
 
 void SwissSystemTournament::OutputFinalResult() {
+    std::cout << "player standing HTML make...";
     SortPlayers();
     int grade = 0;
     int tie = 0;
@@ -417,6 +423,7 @@ void SwissSystemTournament::OutputFinalResult() {
        << "</body>"
        << "</html>";
     fs.close();
+    std::cout << " complete!" << std::endl;
 }
 
 int SwissSystemTournament::imagPlayerNumber() const {

@@ -20,15 +20,15 @@ private :
     bool hasDummyPlayer;
     bool loadingJsonMode{};
     std::string MatchingName{};
-    std::vector<Player> players;
-    std::vector<Player*> playersPermutation;
+    std::vector<Player> players{};
+    std::vector<Player*> playersPermutation{};
     constexpr const static double EPS = 1e-8;
     constexpr const static int INF = 1e9;
 
 public :
 
-    explicit SwissSystemTournament();
-    explicit SwissSystemTournament( int roundNumber, const std::string& matchingName );
+    SwissSystemTournament();
+    SwissSystemTournament( int playerNumber, int roundNumber, const std::string& matchingName );
     ~SwissSystemTournament();
     void build();
 

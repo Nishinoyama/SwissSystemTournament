@@ -4,17 +4,20 @@
 
 int main() {
 
-    int N;
+    int N,i;
     std::string matchingName;
     std::string tmp;
     std::cout << "MatchingName:";
     std::cin >> matchingName;
-    std::cout << "MatchingTimes:";
+    std::cout << "MatchingMembers:";
     std::cin >> N;
-    for( int i = 0; i < N; i++ ){
-        SwissSystemTournament s(i, matchingName);
+    while( true ){
+        std::cout << "MatchingTime:";
+        std::cin >> i;
+        if( i == -1 ) break;
+        SwissSystemTournament s(N, i, matchingName);
         std::cout << "No." << i << " MatchInputReady?:";
-        // std::cin >> tmp;
+        std::cin >> tmp;
         s.InputMatchResult();
         s.OutputFinalResult();
         s.MakeJSONData();
