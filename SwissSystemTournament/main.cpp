@@ -17,6 +17,7 @@ int main() {
         std::cout << "No." << i << " MatchInputReady?:";
         std::cin >> tmp;
         s.InputMatchResult();
+        // s.dropOutByPoint(i*2-2);
         s.MakeJSONData();
         s.OutputFinalResult();
         i++;

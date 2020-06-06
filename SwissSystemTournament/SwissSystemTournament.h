@@ -46,6 +46,10 @@ public :
     void updatePlayerPointer();
 
     void initFromJSON();
+
+    void dropOutByPoint();
+
+    void dropOutByPoint(int supPoint);
 };
 
 

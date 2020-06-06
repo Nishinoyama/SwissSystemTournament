@@ -89,7 +89,7 @@ void SwissSystemTournament::initFromJSON() {
 
     picojson::value dataJSON;
     const std::string err = picojson::parse(dataJSON, json);
-    if( err.size() ) {
+    if( !err.empty() ) {
         std::cerr << err;
     }
 
@@ -221,79 +221,77 @@ void SwissSystemTournament::Matching() {
 }
 
 void SwissSystemTournament::OutputMatching() {
-    std::string matchingOutputFileName;
-    matchingOutputFileName = MatchingName + "/matching_" + std::to_string(matchedRounds);
-    std::fstream fs ( matchingOutputFileName + ".json", std::ios::out );
-    std::bitset<4001> searched;
-    fs << "{\n\t\"matchingList\":[\n";
-    for (int i = 0; i < PlayerNumber; i++ ) {
-        if( playersPermutation[i]->withdrew || playersPermutation[i]->opponent->withdrew ) continue;
-        if( !searched[playersPermutation[i]->id] ) {
-            if( i ) fs << ",\n";
-            fs << "\t\t{\n"
-               << "\t\t\t\"playerID\" : " << playersPermutation[i]->id << ",\n"
-               << "\t\t\t\"opponentID\" : " << playersPermutation[i]->opponent->id << ",\n"
-               << "\t\t\t\"win\" : 0,\n"
-               << "\t\t\t\"lose\" : 0,\n"
-               << "\t\t\t\"draw\" : 0,\n"
-               << "\t\t\t\"withdraw\" : false,\n"
-               << "\t\t\t\"withdrawn\" : false\n"
-               << "\t\t}";
-            searched[playersPermutation[i]->id] = true;
-            searched[playersPermutation[i]->opponent->id] = true;
+    std::vector<bool> searched(imagPlayerNumber(),false);
+    picojson::object matchingJson;
+    picojson::array matchingList;
+    for( const Player* p : playersPermutation ) {
+        if( !searched[p->id] ) {
+            picojson::object matching;
+            matching.insert(std::make_pair("playerID",picojson::value(double(p->id))));
+            matching.insert(std::make_pair("opponentID",picojson::value(double(p->opponent->id))));
+            // matching.insert(std::make_pair("winCount", picojson::value(0.0)));
+            // matching.insert(std::make_pair("loseCount",picojson::value(0.0)));
+            // matching.insert(std::make_pair("drawCount",picojson::value(0.0)));
+            matching.insert(std::make_pair("winCount", picojson::value(double(p->id%7))));
+            matching.insert(std::make_pair("loseCount",picojson::value(double(p->opponent->id%6))));
+            matching.insert(std::make_pair("drawCount",picojson::value(double(11-p->id%7-p->opponent->id%6))));
+            matching.insert(std::make_pair("withdraw", picojson::value(false)));
+            matching.insert(std::make_pair("withdrawn",picojson::value(false)));
+            searched[p->id] = true;
+            searched[p->opponent->id] = true;
+            matchingList.emplace_back(matching);
         }
     }
-    fs << "\n\t]\n}\n";
+    matchingJson.insert(std::make_pair("matchingList",picojson::value(matchingList)));
+    std::string matchingFileName;
+    matchingFileName = MatchingName + "/matching_" + std::to_string(matchedRounds);
+    std::fstream fs ( matchingFileName + ".json", std::ios::out );
+    fs << picojson::value(matchingJson).serialize(true) << std::endl;
     fs.close();
 }
 
 void SwissSystemTournament::InputMatchResult() {
     std::cout << "match result proceed... ";
 
-    std::vector<bool> calculatedPlayer( imagPlayerNumber(),false);
+    std::ifstream ifs( MatchingName + "/matching_" + std::to_string(matchedRounds) + ".json", std::ios::in );
+    const std::string json((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+    ifs.close();
 
-    std::fstream fs;
-    fs.open( MatchingName + "/matching_" + std::to_string(matchedRounds) + ".json", std::ios::binary );
-    picojson::value val;
-    picojson::parse(val, fs);
-
-    // in.read_header()
-    for (int i = 0; i < PlayerNumber; i ++ ) {
-        Player* left = playersPermutation[i];
-        if( !calculatedPlayer[left->id] ){
-            Player* right = left->opponent;
-            // if( left->id == PlayerNumber || right->id == PlayerNumber ) continue;
-
-            int leftWinCount;
-            int leftDrawCount;
-            int leftLoseCount;
-            int leftDrew;
-            int leftDrawn;
-
-            // picojson::
-
-            // /**
-            //  * 実験用の入力値
-            //  */
-            leftWinCount = left->id%4;
-            leftLoseCount = right->id%3;
-            leftDrawCount = 5-leftWinCount-leftLoseCount;
-            leftDrew = left->withdrew;
-            leftDrawn = right->withdrew;
-            // /**
-            //  *
-            //  */
-
-            MatchResult leftResult(leftWinCount,leftDrawCount,leftLoseCount,leftDrew,leftDrawn,right);
-            MatchResult rightResult(leftLoseCount,leftDrawCount,leftWinCount,leftDrawn,leftDrew,left);
-
-            left->pushMatchedResults(leftResult);
-            right->pushMatchedResults(rightResult);
-            calculatedPlayer[left->id] = true;
-            calculatedPlayer[right->id] = true;
-
-        }
+    picojson::value matchingJSON;
+    const std::string err = picojson::parse(matchingJSON, json);
+    if( !err.empty() ) {
+        std::cerr << err;
     }
+
+    picojson::object matchingListObject = matchingJSON.get<picojson::object>();
+    picojson::array matchingList = matchingListObject["matchingList"].get<picojson::array>();
+    for ( const picojson::value& matchingValue : matchingList ){
+        picojson::object matching = matchingValue.get<picojson::object>();
+        int leftID        = matching["playerID"  ].get<double>();
+        int rightID       = matching["opponentID"].get<double>();
+        int leftWinCount  = matching["winCount"  ].get<double>();
+        int leftDrawCount = matching["drawCount" ].get<double>();
+        int leftLoseCount = matching["loseCount" ].get<double>();
+        bool leftDrew      = matching["withdraw"  ].get<bool>();
+        bool leftDrawn     = matching["withdrawn" ].get<bool>();
+        Player *left = &players[leftID];
+        Player *right = &players[rightID];
+
+        // /**
+        //  * 相手がドロップしてた（withdrew）なら勝手に不戦勝にする
+        //  */
+        if( !leftDrew ) leftDrew = left->withdrew;
+        if( !leftDrawn ) leftDrawn = right->withdrew;
+        // /**
+        //  *
+        //  */
+
+        MatchResult leftResult(leftWinCount, leftDrawCount, leftLoseCount, leftDrew, leftDrawn, right);
+        MatchResult rightResult(leftLoseCount, leftDrawCount, leftWinCount, leftDrawn, leftDrew, left);
+        left->pushMatchedResults(leftResult);
+        right->pushMatchedResults(rightResult);
+    }
+
     matchedRounds++;
     std::cout << " complete!" << std::endl;
 }
@@ -432,4 +430,10 @@ void SwissSystemTournament::OutputFinalResult() {
 
 int SwissSystemTournament::imagPlayerNumber() const {
     return PlayerNumber + hasDummyPlayer;
+}
+
+void SwissSystemTournament::dropOutByPoint( int supPoint ) {
+    for( auto& player : players ){
+        if ( player.points <= supPoint ) player.withdrew = true;
+    }
 }
