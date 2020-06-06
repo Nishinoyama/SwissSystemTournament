@@ -15,7 +15,7 @@ bool MatchResult::isWin() const {
 }
 
 bool MatchResult::isDraw() const {
-    return !isAvail() || winCount == loseCount;
+    return ( withdraw && withdrawn ) || winCount == loseCount;
 }
 
 bool MatchResult::isLose() const {

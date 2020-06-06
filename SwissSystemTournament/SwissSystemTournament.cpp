@@ -10,8 +10,10 @@
 #include <fstream>
 #include <bitset>
 #include <iomanip>
+#include <direct.h>
 
-SwissSystemTournament::SwissSystemTournament(int roundNumber, const std::string& matchingName) {
+SwissSystemTournament::SwissSystemTournament( int playerNumber, int roundNumber, const std::string& matchingName) {
+    PlayerNumber = playerNumber;
     matchedRounds = roundNumber;
     MatchingName = matchingName;
     if( matchedRounds == 0 ){
@@ -23,24 +25,29 @@ SwissSystemTournament::SwissSystemTournament(int roundNumber, const std::string&
     OutputMatching();
 }
 
-SwissSystemTournament::SwissSystemTournament() {
-
-    build();
-
-    for (int i = 0; i < MatchingNumber; i++){
-        matchedRounds++;
-        Matching();
-        OutputMatching();
-        InputMatchResult();
-        OutputFinalResult();
-    }
-
-    OutputFinalResult();
-
-}
+SwissSystemTournament::SwissSystemTournament() = default;
 
 SwissSystemTournament::~SwissSystemTournament() {
     std::cout << "Finished Successfully" << std::endl;
+}
+
+void SwissSystemTournament::build(){
+
+    // 奇数人だったらダミーのプレイヤーを作成する
+    hasDummyPlayer = PlayerNumber%2;
+    players.assign( imagPlayerNumber(), Player() );
+    playersPermutation.assign( imagPlayerNumber(), nullptr );
+    for (int i = 0; i < imagPlayerNumber(); i++){
+        players[i].id = i;
+        playersPermutation[i] = &players[i];
+    }
+    if( hasDummyPlayer ){
+        players[PlayerNumber].withdrew = true;
+    }
+
+    _mkdir(MatchingName.c_str());
+
+    Print();
 }
 
 void SwissSystemTournament::MakeJSONData() {
@@ -69,36 +76,20 @@ void SwissSystemTournament::MakeJSONData() {
         playersJSON.emplace_back(playerObject);
     }
     id.insert(std::make_pair("players", picojson::value(playersJSON)));
-    std::ofstream ofs( MatchingName+"_"+std::to_string(matchedRounds)+".json");
+    std::ofstream ofs( MatchingName+"/data_"+std::to_string(matchedRounds)+".json");
     ofs << picojson::value(id).serialize(true) << std::endl;
     ofs.close();
-}
-
-void SwissSystemTournament::build(){
-
-    PlayerNumber = 37;
-    // 奇数人だったらダミーのプレイヤーを作成する
-    hasDummyPlayer = PlayerNumber%2;
-    players.assign( imagPlayerNumber(), Player() );
-    playersPermutation.assign( imagPlayerNumber(), nullptr );
-    for (int i = 0; i < imagPlayerNumber(); i++){
-        players[i].id = i;
-        playersPermutation[i] = &players[i];
-    }
-    if( hasDummyPlayer ){
-        players[PlayerNumber].withdrew = true;
-    }
-    Print();
+    std::cout << "save JSON data successfully" << std::endl;
 }
 
 void SwissSystemTournament::initFromJSON() {
-    std::ifstream ifs( MatchingName + "_" + std::to_string(matchedRounds) + ".json", std::ios::in );
+    std::ifstream ifs( MatchingName + "/data_" + std::to_string(matchedRounds) + ".json", std::ios::in );
     const std::string json((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
     ifs.close();
 
     picojson::value dataJSON;
     const std::string err = picojson::parse(dataJSON, json);
-    if( err.size() ) {
+    if( !err.empty() ) {
         std::cerr << err;
     }
 
@@ -126,19 +117,19 @@ void SwissSystemTournament::initFromJSON() {
             matchedResult.withdrawn  = matchedResultObject["withdrawn" ].get<bool>();
             player.pushMatchedResults(matchedResult);
         }
-        players.emplace_back(player);
+        players.push_back(player);
     }
 
     PlayerNumber = players.size();
     hasDummyPlayer = PlayerNumber%2;
-    playersPermutation.assign(imagPlayerNumber(), nullptr);
+    playersPermutation.clear();
     for( int i = 0; i < imagPlayerNumber(); i++ ) {
         players[i].buildMatchResult(players);
-        playersPermutation[i] = &players[i];
+        playersPermutation.push_back(&players[i]);
     }
 
-    OutputFinalResult();
-
+    std::cout << "load JSON data successfully" << std::endl;
+    // OutputFinalResult();
 }
 
 void SwissSystemTournament::Print() const {
@@ -153,10 +144,12 @@ void SwissSystemTournament::Matching() {
 
     SortPlayers();
 
+    std::cout << "matching.";
     /** マッチングをDPで処理
      * dp : dp本体
      * dp[ni][S] := [0,ni) までマッチング済み、[ni,ni+K)までのマッチング済み（bit管理）での最小の偏り
      * K は 少なくとも(ラウンド数+2)で全員のマッチングは成立する。（数学的証明は厳密には行っていない）
+     * K = 6 から実際に調査、マッチング不成立ならKを増やしていく。
      * ni+k+1番目とマッチング成立時の変遷 dp[ni][S] + cost -> dp[ni+1][S>>1|1<<k]
      * ただし、S&(1<<k) == 0 である必要がある。 （マッチングのダブり）
      * もし、S&1（niがマッチング済み）なら、dp[ni][S] -> dp[ni+1][S>>1]
@@ -164,132 +157,143 @@ void SwissSystemTournament::Matching() {
      * rb : dpの変遷元
      * rb[ni][S] := { 変遷元のS', 変遷でマッチングしたか }
      */
-    std::vector<std::vector<int>> dp(imagPlayerNumber()+1, std::vector<int>(1<<(matchedRounds+2), 1e9 ) );
-    std::vector<std::vector<std::pair<int,int>>> rb(imagPlayerNumber()+1, std::vector<std::pair<int,int>>(1<<(matchedRounds+2), {-1,-1} ) );
-    dp[0][0] = 0;
-    for( int ni = 0; ni < imagPlayerNumber(); ni++ ){
-        for( int bi = 0; bi < 1 << (matchedRounds+2); bi++ ){
-            int nni = ni+1;
-            if( dp[ni][bi] == INF ) continue;
-            if( bi&1 ){
-                if( dp[ni][bi] < dp[nni][bi>>1] ){
-                    dp[nni][bi>>1] = dp[ni][bi];
-                    rb[nni][bi>>1] = {bi,0};
+    for( int ext = std::min( 6, matchedRounds+2 ); ext < INF; ext++ ){
+        std::vector<std::vector<int>> dp(imagPlayerNumber() + 1, std::vector<int>(1 << ext, 1e9));
+        std::vector<std::vector<std::pair<int, int>>> rb(imagPlayerNumber() + 1,
+                                                         std::vector<std::pair<int, int>>(1 << ext, {-1, -1}));
+        dp[0][0] = 0;
+        for (int ni = 0; ni < imagPlayerNumber(); ni++) {
+            for (int bi = 0; bi < 1 << ext; bi++) {
+                int nni = ni + 1;
+                if (dp[ni][bi] == INF) continue;
+                if (bi & 1) {
+                    if (dp[ni][bi] < dp[nni][bi >> 1]) {
+                        dp[nni][bi >> 1] = dp[ni][bi];
+                        rb[nni][bi >> 1] = {bi, 0};
+                    }
+                    continue;
                 }
-                continue;
-            }
-            for( int pi = 0; pi < matchedRounds+2; pi++ ){
-                int ppi = ni+pi+1;
-                if( ppi >= imagPlayerNumber() ) break;
-                if( (bi>>1)&(1<<pi) ) continue;
-                int bbi = (bi>>1)|(1<<pi);
-                int cost = playersPermutation[ni]->points - playersPermutation[ppi]->points;
-                if( playersPermutation[ni]->matchedPlayerID.find(playersPermutation[ppi]->id) == playersPermutation[ni]->matchedPlayerID.end() ){
-                    if( dp[ni][bi] + cost < dp[nni][bbi] ){
-                        dp[nni][bbi] = dp[ni][bi];
-                        rb[nni][bbi] = {bi,1};
+                for (int pi = 0; pi < ext; pi++) {
+                    int ppi = ni + pi + 1;
+                    if (ppi >= imagPlayerNumber()) break;
+                    if ((bi >> 1) & (1 << pi)) continue;
+                    int bbi = (bi >> 1) | (1 << pi);
+                    int cost = playersPermutation[ni]->points - playersPermutation[ppi]->points;
+                    if (playersPermutation[ni]->matchedPlayerID.find(playersPermutation[ppi]->id) ==
+                        playersPermutation[ni]->matchedPlayerID.end()) {
+                        if (dp[ni][bi] + cost < dp[nni][bbi]) {
+                            dp[nni][bbi] = dp[ni][bi];
+                            rb[nni][bbi] = {bi, 1};
+                        }
                     }
                 }
             }
+            if (ni % 50 == 0) std::cout << ".";
         }
-    }
 
-    int rbn = imagPlayerNumber(), rbb = 0;
-    const static auto invertLeftShift = []( int k ){
-        int count = 0;
-        int bit = 1;
-        while( !( k & bit ) ) count++, bit <<= 1;
-        return count;
-    };
-    while( rbn != 0 || rbb != 0 ){
-        int tmp = rb[rbn][rbb].first;
-        assert( tmp>=0 );
-        if( rb[rbn][rbb].second ){
-            int transition = (rbb<<1) - tmp;
-            int li = rbn-1;
-            int ri = li+invertLeftShift(transition);
-            playersPermutation[li]->opponent = playersPermutation[ri];
-            playersPermutation[ri]->opponent = playersPermutation[li];
+        int rbn = imagPlayerNumber(), rbb = 0;
+        const static auto invertLeftShift = []( int k ){
+            int count = 0;
+            int bit = 1;
+            while( !( k & bit ) ) count++, bit <<= 1;
+            return count;
+        };
+        bool matchSuccess = true;
+        while( rbn != 0 || rbb != 0 ){
+            int tmp = rb[rbn][rbb].first;
+            if( tmp<0 ){
+                matchSuccess = false;
+                break;
+            }
+            if( rb[rbn][rbb].second ){
+                int transition = (rbb<<1) - tmp;
+                int li = rbn-1;
+                int ri = li+invertLeftShift(transition);
+                playersPermutation[li]->opponent = playersPermutation[ri];
+                playersPermutation[ri]->opponent = playersPermutation[li];
+            }
+            rbn--;
+            rbb = tmp;
         }
-        rbn--;
-        rbb = tmp;
+        if( matchSuccess ) break;
     }
+    std::cout << " complete!" << std::endl;
 }
 
 void SwissSystemTournament::OutputMatching() {
-    std::string matchingOutputFileName;
-    matchingOutputFileName = MatchingName + "_matching_" + std::to_string(matchedRounds);
-    std::fstream fs ( matchingOutputFileName + ".json", std::ios::out );
-    std::bitset<4001> searched;
-    fs << "{\n\t\"matchingList\":[\n";
-    for (int i = 0; i < PlayerNumber; i++ ) {
-        if( playersPermutation[i]->withdrew || playersPermutation[i]->opponent->withdrew ) continue;
-        if( !searched[playersPermutation[i]->id] ) {
-            if( i ) fs << ",\n";
-            fs << "\t\t{\n"
-               << "\t\t\t\"playerID\" : " << playersPermutation[i]->id << ",\n"
-               << "\t\t\t\"opponentID\" : " << playersPermutation[i]->opponent->id << ",\n"
-               << "\t\t\t\"win\" : 0,\n"
-               << "\t\t\t\"lose\" : 0,\n"
-               << "\t\t\t\"draw\" : 0,\n"
-               << "\t\t\t\"withdraw\" : false,\n"
-               << "\t\t\t\"withdrawn\" : false\n"
-               << "\t\t}";
-            searched[playersPermutation[i]->id] = true;
-            searched[playersPermutation[i]->opponent->id] = true;
+    std::vector<bool> searched(imagPlayerNumber(),false);
+    picojson::object matchingJson;
+    picojson::array matchingList;
+    for( const Player* p : playersPermutation ) {
+        if( !searched[p->id] ) {
+            picojson::object matching;
+            matching.insert(std::make_pair("playerID",picojson::value(double(p->id))));
+            matching.insert(std::make_pair("opponentID",picojson::value(double(p->opponent->id))));
+            // matching.insert(std::make_pair("winCount", picojson::value(0.0)));
+            // matching.insert(std::make_pair("loseCount",picojson::value(0.0)));
+            // matching.insert(std::make_pair("drawCount",picojson::value(0.0)));
+            matching.insert(std::make_pair("winCount", picojson::value(double(p->id%7))));
+            matching.insert(std::make_pair("loseCount",picojson::value(double(p->opponent->id%6))));
+            matching.insert(std::make_pair("drawCount",picojson::value(double(11-p->id%7-p->opponent->id%6))));
+            matching.insert(std::make_pair("withdraw", picojson::value(false)));
+            matching.insert(std::make_pair("withdrawn",picojson::value(false)));
+            searched[p->id] = true;
+            searched[p->opponent->id] = true;
+            matchingList.emplace_back(matching);
         }
     }
-    fs << "\n\t]\n}\n";
+    matchingJson.insert(std::make_pair("matchingList",picojson::value(matchingList)));
+    std::string matchingFileName;
+    matchingFileName = MatchingName + "/matching_" + std::to_string(matchedRounds);
+    std::fstream fs ( matchingFileName + ".json", std::ios::out );
+    fs << picojson::value(matchingJson).serialize(true) << std::endl;
     fs.close();
 }
 
 void SwissSystemTournament::InputMatchResult() {
+    std::cout << "match result proceed... ";
 
-    std::vector<bool> calculatedPlayer( imagPlayerNumber(),false);
+    std::ifstream ifs( MatchingName + "/matching_" + std::to_string(matchedRounds) + ".json", std::ios::in );
+    const std::string json((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+    ifs.close();
 
-    std::fstream fs;
-    fs.open( MatchingName + "_matching_" + std::to_string(matchedRounds) + ".json", std::ios::binary );
-    picojson::value val;
-    picojson::parse(val, fs);
-
-    // in.read_header()
-    for (int i = 0; i < PlayerNumber; i ++ ) {
-        Player* left = playersPermutation[i];
-        if( !calculatedPlayer[left->id] ){
-            Player* right = left->opponent;
-            // if( left->id == PlayerNumber || right->id == PlayerNumber ) continue;
-
-            int leftWinCount;
-            int leftDrawCount;
-            int leftLoseCount;
-            int leftDrew;
-            int leftDrawn;
-
-            // picojson::
-
-            // /**
-            //  * 実験用の入力値
-            //  */
-            leftWinCount = left->id%4;
-            leftLoseCount = right->id%3;
-            leftDrawCount = 5-leftWinCount-leftLoseCount;
-            leftDrew = left->withdrew;
-            leftDrawn = right->withdrew;
-            // /**
-            //  *
-            //  */
-
-            MatchResult leftResult(leftWinCount,leftDrawCount,leftLoseCount,leftDrew,leftDrawn,right);
-            MatchResult rightResult(leftLoseCount,leftDrawCount,leftWinCount,leftDrawn,leftDrew,left);
-
-            left->pushMatchedResults(leftResult);
-            right->pushMatchedResults(rightResult);
-            calculatedPlayer[left->id] = true;
-            calculatedPlayer[right->id] = true;
-
-        }
+    picojson::value matchingJSON;
+    const std::string err = picojson::parse(matchingJSON, json);
+    if( !err.empty() ) {
+        std::cerr << err;
     }
+
+    picojson::object matchingListObject = matchingJSON.get<picojson::object>();
+    picojson::array matchingList = matchingListObject["matchingList"].get<picojson::array>();
+    for ( const picojson::value& matchingValue : matchingList ){
+        picojson::object matching = matchingValue.get<picojson::object>();
+        int leftID        = matching["playerID"  ].get<double>();
+        int rightID       = matching["opponentID"].get<double>();
+        int leftWinCount  = matching["winCount"  ].get<double>();
+        int leftDrawCount = matching["drawCount" ].get<double>();
+        int leftLoseCount = matching["loseCount" ].get<double>();
+        bool leftDrew      = matching["withdraw"  ].get<bool>();
+        bool leftDrawn     = matching["withdrawn" ].get<bool>();
+        Player *left = &players[leftID];
+        Player *right = &players[rightID];
+
+        // /**
+        //  * 相手がドロップしてた（withdrew）なら勝手に不戦勝にする
+        //  */
+        if( !leftDrew ) leftDrew = left->withdrew;
+        if( !leftDrawn ) leftDrawn = right->withdrew;
+        // /**
+        //  *
+        //  */
+
+        MatchResult leftResult(leftWinCount, leftDrawCount, leftLoseCount, leftDrew, leftDrawn, right);
+        MatchResult rightResult(leftLoseCount, leftDrawCount, leftWinCount, leftDrawn, leftDrew, left);
+        left->pushMatchedResults(leftResult);
+        right->pushMatchedResults(rightResult);
+    }
+
     matchedRounds++;
+    std::cout << " complete!" << std::endl;
 }
 
 void SwissSystemTournament::CalculatePlayerState() {
@@ -319,6 +323,11 @@ void SwissSystemTournament::OutputPlayerState() {}
 
 void SwissSystemTournament::SortPlayers() {
 
+    playersPermutation.clear();
+    for( int i = 0; i < imagPlayerNumber(); i++ ){
+        playersPermutation.push_back(&players[i]);
+    }
+
     CalculatePlayerState();
     std::sort(playersPermutation.begin(), playersPermutation.end(),
               []( const Player* lp, const Player* rp) -> bool {
@@ -337,11 +346,12 @@ void SwissSystemTournament::SortPlayers() {
 };
 
 void SwissSystemTournament::OutputFinalResult() {
+    std::cout << "player standing HTML make...";
     SortPlayers();
     int grade = 0;
     int tie = 0;
     std::string resultHTMLFileName;
-    resultHTMLFileName = MatchingName + "_result_" + std::to_string(matchedRounds) + ".html";
+    resultHTMLFileName = MatchingName + "/result_" + std::to_string(matchedRounds) + ".html";
     std::fstream fs( resultHTMLFileName, std::ios::out );
     fs << "<html>"
        << "<head>"
@@ -381,23 +391,24 @@ void SwissSystemTournament::OutputFinalResult() {
         fs << "<th>R" << i+1 << "</th>";
     }
     fs << "</tr>";
-    for ( const Player* player : playersPermutation ){
-        if( player->withdrew ) continue;
+    for ( const Player* playerP : playersPermutation ){
+        Player player = *playerP;
+        if( player.withdrew ) continue;
         fs << "<tr>";
-        if( grade ){
-            if( std::abs( player->opponentMatchWinPercentage - (player-1)->opponentMatchWinPercentage ) < EPS
-                &&  player->points == (player-1)->points ) tie++;
-            else tie = 0;
-        }
+        // if( grade ){
+        //     if( std::abs( player.opponentMatchWinPercentage - (player-1).opponentMatchWinPercentage ) < EPS
+        //         &&  player.points == (player-1).points ) tie++;
+        //     else tie = 0;
+        // }
         fs << "<td>" << ++grade-tie << "</td>"
-           << "<td>" << player->id << "</td>"
-           << "<td>" << player->roundCount << "</td>" << std::fixed << std::setprecision(4)
-           << "<td>" << player->points << "</td>"
-           << "<td>" << player->opponentMatchWinPercentage << "</td>"
-           << "<td>" << player->gameWinPercentage << "</td>"
-           << "<td>" << player->opponentGameWinPercentage << "</td>";
+           << "<td>" << player.id << "</td>"
+           << "<td>" << player.roundCount << "</td>" << std::fixed << std::setprecision(4)
+           << "<td>" << player.points << "</td>"
+           << "<td>" << player.opponentMatchWinPercentage << "</td>"
+           << "<td>" << player.gameWinPercentage << "</td>"
+           << "<td>" << player.opponentGameWinPercentage << "</td>";
         int rounds = 0;
-        for( const MatchResult result : player->matchedResults ){
+        for( const MatchResult result : player.matchedResults ){
             fs << "<td ";
             if( result.isAvail() ) {
                 fs << "class='" << (result.isWin() ? "win" : result.isDraw() ? "draw" : "lose")
@@ -413,8 +424,16 @@ void SwissSystemTournament::OutputFinalResult() {
        << "</body>"
        << "</html>";
     fs.close();
+    std::cout << " complete!" << std::endl;
+    std::cout << players.size() << std::endl;
 }
 
 int SwissSystemTournament::imagPlayerNumber() const {
     return PlayerNumber + hasDummyPlayer;
+}
+
+void SwissSystemTournament::dropOutByPoint( int supPoint ) {
+    for( auto& player : players ){
+        if ( player.points <= supPoint ) player.withdrew = true;
+    }
 }

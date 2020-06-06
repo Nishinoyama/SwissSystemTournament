@@ -4,20 +4,23 @@
 
 int main() {
 
-    int N;
+    int N,i=0;
     std::string matchingName;
     std::string tmp;
     std::cout << "MatchingName:";
     std::cin >> matchingName;
-    std::cout << "MatchingTimes:";
+    std::cout << "MatchingMembers:";
     std::cin >> N;
-    for( int i = 0; i < N; i++ ){
-        SwissSystemTournament s(i, matchingName);
+    while( true ){
+        if( i == -1 ) break;
+        SwissSystemTournament s(N, i, matchingName);
         std::cout << "No." << i << " MatchInputReady?:";
         std::cin >> tmp;
         s.InputMatchResult();
-        s.OutputFinalResult();
+        // s.dropOutByPoint(i*2-2);
         s.MakeJSONData();
+        s.OutputFinalResult();
+        i++;
     }
 	return 0;
 }
