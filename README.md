@@ -17,4 +17,4 @@ GUIを実装予定。
 
 ## 使用ライブラリ
 + [picojson](https://github.com/kazuho/picojson)
-+ [fast-cpp-csv-parser](https://github.com/ben-strasser/fast-cpp-csv-parser)
++ direct.h
